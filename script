@@ -1,0 +1,46 @@
+#!/bin/bash
+BACKUP_DIR="/var/backups"
+HOSTNAME="192.168.88.1"
+PORT="22"
+USER="admin"
+PASS="123456"
+TMP=$(mktemp)
+TODAY=$(date +%F)
+FILENAME="$HOSTNAME-$TODAY"
+PATH="/usr/local/sbin:/usr/sbin:/sbin:/usr/local/bin:/usr/bin:/bin"
+
+# create expect script
+cat > $TMP << EOF 
+#exp_internal 1 # Uncomment for debug
+set timeout -1
+spawn ssh -p$PORT $USER@$HOSTNAME
+match_max 100000
+expect -exact "password:"
+send -- "$PASS\r"
+sleep 1
+expect " > "
+send -- "/export file=$FILENAME\r"
+expect " > "
+send -- "/system backup save name=$FILENAME\r"
+expect " > "
+send -- "quit\r"
+expect eof
+EOF
+
+# run expect script
+#cat $TMP # Uncomment for debug
+expect -f $TMP
+
+# remove expect script
+rm $TMP
+
+# download and remove backup files
+# "xfer:clobber on" means overwrite existing files
+cd ${BACKUP_DIR}
+echo "
+  set xfer:clobber on
+  get ${FILENAME}.rsc
+  rm ${FILENAME}.rsc 
+  get ${FILENAME}.backup
+  rm ${FILENAME}.backup" | 
+lftp -u $USER,$PASS $HOSTNAME
